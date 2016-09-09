@@ -234,14 +234,16 @@ int main(int argc, char** argv)
         if (rc != STATUS_OK)
         {
             printf("Wait failed! (timeout is %d ms)\n%s\n", SAMPLE_READ_WAIT_TIMEOUT, OpenNI::getExtendedError());
-            continue;
+        PWM_write(0,0);	 
+	   continue;
         }
 
         rc = depth.readFrame(&frame);
         if (rc != STATUS_OK)
         {
             printf("Read failed!\n%s\n", OpenNI::getExtendedError());
-            continue;
+            PWM_write(0,0);
+	    continue;
         }
 
         vector<point> points;
@@ -289,7 +291,7 @@ int main(int argc, char** argv)
 
         //If there are points, find the centroid and calculate the command goal.
         //If there are no points, simply publish a stop goal.
-        if (n>4000)
+        if (n>2500)
         {
             x /= n;
             y /= n;
@@ -387,9 +389,9 @@ int main(int argc, char** argv)
 
         last_cmd = current_cmd;
         //cout<<"**********************linear= "<<current_cmd.linear<<endl;
-        L_speed=1.5*k_factor*(current_cmd.linear-0.13*current_cmd.angular)*100/1.5;
+        L_speed=k_factor*(current_cmd.linear-0.13*current_cmd.angular)*100/1.5;
 
-        R_speed=1.5*k_factor*(current_cmd.linear+0.13*current_cmd.angular)*100/1.5;
+        R_speed=k_factor*(current_cmd.linear+0.13*current_cmd.angular)*100/1.5;
 
         cout<<"linear= "<<current_cmd.linear<<endl;
         cout<<"angular= "<<current_cmd.angular<<endl;
@@ -400,6 +402,8 @@ int main(int argc, char** argv)
         //******************************************
         cout<<"L_speed= "<<L_speed<<endl;
         cout<<"R_speed= "<<R_speed<<endl;
+	L_speed*=1.3;
+	R_speed*=1.3;
 	PWM_write((int)L_speed,(int)R_speed);
         //Write_A_B(L_speed,R_speed,Channal_AB,1);
 	
