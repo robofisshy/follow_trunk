@@ -1,0 +1,18 @@
+###Debug notes
+
+###date 2016.8.15
+	Use raspberry pi to control the motors.
+	Porting openNI to pi.
+	Write driver to drive motors.
+	Optimize program by add "-O2" during compiling. 
+###date 2016.8.16
+	Debugging,we found the motor have some problem of mechanical structure,
+	maybe there arm some differences between the two motors,like resistance...etc.
+###date 2016.8.27
+	We bought a little car to test our code.
+	Modify my code to generate PWM to control motors.
+###date 2016.9.9
+   	When we testing the car,we found it can not work well in the dark environment,
+	we measured some paramaters, found the battery has run down.
+	Increase the duty ratio of PWM to increase the velocity.
+
