@@ -205,7 +205,20 @@ int main(int argc, char** argv)
     modeDepth.setFps( 30 );
     modeDepth.setPixelFormat( PIXEL_FORMAT_DEPTH_1_MM );
     depth.setVideoMode(modeDepth);
-
+    
+    double RealWorldXtoZ=2*tan(1.0226/2);
+    double RealWorldYtoZ=2*tan(0.796616/2);
+    double real_factor_x[307200];
+    double real_factor_y[307200];
+    int i,j;
+    for( i=0;i<480;i++)
+    {
+	for(j=0;j<640;j++)
+	{
+		real_factor_x[i*640+j]= ((float)j / 640.0 - .5f)*RealWorldXtoZ;
+		real_factor_y[i*640+j] = (.5f - (float)i / 480.0)*RealWorldYtoZ;
+	}
+    }	
     if( device.isImageRegistrationModeSupported(
             IMAGE_REGISTRATION_DEPTH_TO_COLOR ) )
     {
@@ -255,8 +268,10 @@ int main(int argc, char** argv)
             for(int j=0;j<frame.getWidth();j++)
             {
                 xx = pDepth[i*frame.getWidth()+j];
-                CoordinateConverter::convertDepthToWorld (depth,i,j,xx,&x,&y,&z);
-                depth_point.x=x*0.001;
+                //CoordinateConverter::convertDepthToWorld (depth,i,j,xx,&x,&y,&z);
+                x=real_factor_x[i*640+j]*xx;
+		y=real_factor_y[i*640+j]*xx;
+		depth_point.x=x*0.001;
                 depth_point.y=y*0.001;
                 depth_point.z=z*0.001;
                 points.push_back(depth_point);
