@@ -162,11 +162,11 @@ int main(int argc, char** argv)
     //wiringPiSetup();
     PWM_init();
     double min_y_(-0.35), max_y_(0.35),
-            min_x_(0.1), max_x_(0.5),
+            min_x_(-0.3), max_x_(0.1),
             max_z_(1.2), goal_z_(0.5),
             z_scale_(2), x_scale_(6);
     bool enabled_(true);
-    double accel_lim_v(0.6);
+    double accel_lim_v(0.8);
     double accel_lim_w(5.5);
     double speed_lim_v(0.8);
     double speed_lim_w(5.4);
@@ -213,12 +213,12 @@ int main(int argc, char** argv)
     int i,j;
     for( i=0;i<480;i++)
     {
-	for(j=0;j<640;j++)
-	{
-		real_factor_x[i*640+j]= ((float)j / 640.0 - .5f)*RealWorldXtoZ;
-		real_factor_y[i*640+j] = (.5f - (float)i / 480.0)*RealWorldYtoZ;
-	}
-    }	
+		for(j=0;j<640;j++)
+		{
+			real_factor_x[i*640+j]= ((float)j / 640.0 - .5f)*RealWorldXtoZ;
+			real_factor_y[i*640+j] = (.5f - (float)i / 480.0)*RealWorldYtoZ;
+		}
+    }	//坐标转换
     if( device.isImageRegistrationModeSupported(
             IMAGE_REGISTRATION_DEPTH_TO_COLOR ) )
     {
@@ -293,7 +293,7 @@ int main(int argc, char** argv)
             if (!isnan(x) && !isnan(y) && !isnan(z))
             {
                 //Test to ensure the point is within the aceptable box.
-                if (-iter->y > min_y_ && -iter->y < max_y_ && iter->x < max_x_ && iter->x > min_x_ && iter->z < max_z_)
+                if (-iter->y > min_y_ && -iter->y < max_y_ && iter->x < max_x_ && iter->x > min_x_ && iter->z < max_z_&& iter->z > 0.3)
                 {
                     //Add the point to the totals
                     x += iter->x;
@@ -306,7 +306,7 @@ int main(int argc, char** argv)
 
         //If there are points, find the centroid and calculate the command goal.
         //If there are no points, simply publish a stop goal.
-        if (n>2500)
+        if (n>500)
         {
             x /= n;
             y /= n;
