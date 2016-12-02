@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 2.8.3)
+project(follow_trunk)
+
+include_directories(./include/openni2)
+
+  SET(OpenNI2_LIBRARIES ${OpenNI2_LIBRARY})  
+
+ set(SOURCE_FILES follow.cpp serial.cpp)
+ add_executable(follow follow.cpp serial.cpp)
+
+ set(CMAKE_CXX_FLAGS -O2)	
+
+ target_link_libraries(follow
+   ${OpenNI2_LIBRARIES}
+)
