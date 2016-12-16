@@ -51,7 +51,7 @@
 using namespace openni;
 using namespace std;
 
-double L_speed(0),R_speed(0);
+
 int fd;
 typedef struct point
 {
@@ -70,8 +70,8 @@ extern int serial_Send(int fd, char *send_buf,int data_len);
 extern int serial_Recv(int fd, char *rcv_buf,int data_len);
 typedef struct velocity
 {
-	double linear;
-	double angular;
+	double l;
+	double r;
 }velocity;
 
 inline int sign(double x)
@@ -161,8 +161,10 @@ void send_vel_to_uno(int state_,double lspeed_,double rspeed_)
 	int len_t;
 	int len_r;
 	
-	int ll=round(10*lspeed_);	//keep one decimal
-	int rr=round(10*rspeed_);
+	//int ll=round(10*lspeed_);	//keep one decimal
+	//int rr=round(10*rspeed_);
+	int ll=round(30*lspeed_/0.6);	//keep one decimal
+	int rr=round(30*rspeed_/0.6);
 	if(state_==RUN){
 		if(ll==0&&rr==0)
                 	sprintf(send_vel, "%c", '0');
@@ -174,8 +176,8 @@ void send_vel_to_uno(int state_,double lspeed_,double rspeed_)
 		sprintf(send_vel, "%c", '0');	
 		cout<<"It's stop time"<<endl;
 	}
-	ll=51+(ll-10)*5;	//51 means 1.5m/s, when add 0.1m/s,add 5 to ll
-	rr=51+(rr-10)*5;
+	//ll=51+(ll-10)*5;	//51 means 1m/s, when add 0.1m/s,add 5 to ll
+	//rr=51+(rr-10)*5;
     	sprintf(lspeed, "%d", rr);
     	sprintf(rspeed, "%d", ll);
 
@@ -190,10 +192,12 @@ void send_vel_to_uno(int state_,double lspeed_,double rspeed_)
 }
 int main(int argc, char** argv)
 {
+	double L_speed(0),R_speed(0);
+	double s_theta(0),c(0);
 	GpioInit(); 		//Initialize the GPIO
 	fd=serial_open();
         tcflush(fd,TCIOFLUSH);
-
+	double max_speed=0.6;
 	double min_y_(-0.35), max_y_(0.35),
 			min_x_(0.2), max_x_(0.5),
 			max_z_(1.5), goal_z_(0.6),
@@ -205,6 +209,7 @@ int main(int argc, char** argv)
 	double speed_lim_w(3.5);
 	double decel_factor(1);
 	double k_factor(1);
+	double theta(0);
     velocity current_cmd{0,0},last_cmd{0,0};
 	Status rc = OpenNI::initialize();
 	if (rc != STATUS_OK)
@@ -270,6 +275,7 @@ int main(int argc, char** argv)
 	VideoFrameRef frame;
 	long double period(0.0);
 	while (1){
+		theta=0;
 		struct timeval tpstart;
 		gettimeofday(&tpstart,NULL);
 		long double timenow = tpstart.tv_sec+tpstart.tv_usec/1000000.0;
@@ -345,118 +351,107 @@ int main(int argc, char** argv)
 
 				if (enabled_)
 				{
-					current_cmd.linear = 0;
-					current_cmd.angular = 0;
+					 L_speed = 0;
+					 R_speed = 0;
 					//cmdpub_.publish(geometry_msgs::TwistPtr(new geometry_msgs::Twist()));
 				}
 			}
 			else
 			{
-				current_cmd.linear = (z - goal_z_) * z_scale_;
-				if(current_cmd.linear<0)
-					current_cmd.linear=0;
-				current_cmd.angular = y * x_scale_;
-				//cmdpub_.publish(cmd);
+				theta = atan2(y,z);
+				cout<<"theta="<<theta<<endl;
+				struct timeval tpend;
+				gettimeofday(&tpend,NULL);
+				period =tpend.tv_sec+ tpend.tv_usec/1000000.0 - timenow;
+				if(theta>0.01 || theta<-0.01)
+				{
+					s_theta=abs(sin(theta));
+					c=(sqrt(y*y+z*z)-goal_z_)/(2*s_theta);
+					cout<<"c="<<c<<endl;
+					if(theta>0)
+					{
+						cout<<"theta>0"<<endl;
+						L_speed= 2*(c+0.17)*theta/period;
+						R_speed= 2*(c-0.17)*theta/period;
+					}
+					if(theta<0)
+					{
+						cout<<"theta<0"<<endl;
+						L_speed= -2*(c-0.17)*theta/period;
+						R_speed= -2*(c+0.17)*theta/period;
+					}
+				}
+				else
+				{
+					L_speed= (z-goal_z_)/period;
+					R_speed= (z-goal_z_)/period;
+				}
 			}
 
 		}
 		else
 		{
-			current_cmd.linear = 0;
-			current_cmd.angular = 0;
+			 L_speed= 0;
+			 R_speed= 0;
 		}
-                //********************速度smooth*******************//
-		struct timeval tpend;
-		gettimeofday(&tpend,NULL);
-		period =tpend.tv_sec+ tpend.tv_usec/1000000.0 - timenow;
-		//cout<<"period="<<period<<endl;
-		current_cmd.linear  =
-				current_cmd.linear  > 0.0 ? std::min(current_cmd.linear,  speed_lim_v) : std::max(current_cmd.linear,  -speed_lim_v);
-		current_cmd.angular =
-				current_cmd.angular > 0.0 ? std::min(current_cmd.angular, speed_lim_w) : std::max(current_cmd.angular, -speed_lim_w);
+		cout<<"first_L_speed= "<<L_speed<<endl;
+		cout<<"first_R_speed= "<<R_speed<<endl; 
 
-		double v_inc, w_inc, max_v_inc, max_w_inc;
-
-		v_inc = current_cmd.linear - last_cmd.linear;
-		if (last_cmd.linear*current_cmd.linear < 0.0)
-		{
-			// countermarch (on robots with significant inertia; requires odometry feedback to be detected)
-			max_v_inc = decel_factor*accel_lim_v*period;
-		}
-		else
-		{
-			max_v_inc = ((v_inc*current_cmd.linear > 0.0)?accel_lim_v:decel_factor*accel_lim_v)*period;
-		}
-		w_inc = current_cmd.angular - last_cmd.angular;
-		if (last_cmd.angular*current_cmd.angular < 0.0)
-		{
-			// countermarch (on robots with significant inertia; requires odometry feedback to be detected)
-			max_w_inc = decel_factor*accel_lim_w*period;
-		}
-		else
-		{
-			max_w_inc = ((w_inc*current_cmd.angular > 0.0)?accel_lim_w:decel_factor*accel_lim_w)*period;
-		}
-
-		double MA = sqrt(    v_inc *     v_inc +     w_inc *     w_inc);
-		double MB = sqrt(max_v_inc * max_v_inc + max_w_inc * max_w_inc);
-
-		double Av = std::abs(v_inc) / MA;
-		double Aw = std::abs(w_inc) / MA;
-		double Bv = max_v_inc / MB;
-		double Bw = max_w_inc / MB;
-		double theta = atan2(Bw, Bv) - atan2(Aw, Av);
-
-		if (theta < 0)
-		{
-			// overconstrain linear velocity
-			max_v_inc = (max_w_inc*std::abs(v_inc))/std::abs(w_inc);
-		}
-		else
-		{
-			// overconstrain angular velocity
-			max_w_inc = (max_v_inc*std::abs(w_inc))/std::abs(v_inc);
-		}
-
-
-		if (std::abs(v_inc) > max_v_inc)
-		{
-			// we must limit linear velocity
-			current_cmd.linear  = last_cmd.linear  + sign(v_inc)*max_v_inc;
-		}
-
-
-		if (std::abs(w_inc) > max_w_inc)
-		{
-			// we must limit angular velocity
-			current_cmd.angular = last_cmd.angular + sign(w_inc)*max_w_inc;
-		}
-
-		last_cmd = current_cmd;
-		//cout<<"**********************linear= "<<current_cmd.linear<<endl;
-		R_speed=k_factor*(current_cmd.linear-0.17*current_cmd.angular);
-
-		L_speed=k_factor*(current_cmd.linear+0.17*current_cmd.angular);
-
-	//	cout<<"linear= "<<current_cmd.linear<<endl;
-	//	cout<<"angular= "<<current_cmd.angular<<endl;
 		if(L_speed<0)
+		{
+			R_speed=R_speed-L_speed;
 			L_speed=0;
+		}
 		if(R_speed<0)
+		{
+			L_speed=L_speed-R_speed;
 			R_speed=0;
+		}
+		if(L_speed>max_speed)
+		{
+			R_speed=R_speed*max_speed/L_speed;
+			L_speed=max_speed;
+		}
+		if(R_speed>max_speed)
+		{
+			L_speed=L_speed*max_speed/R_speed;
+			R_speed=max_speed;
+		}
+		//********************速度smooth*******************//
+		if(L_speed>0)
+		{
+			double L_speed2= (L_speed-last_cmd.l) > 0 ? min(last_cmd.l+accel_lim_v, L_speed ) : max(last_cmd.l-accel_lim_v , L_speed);
+			R_speed=R_speed*L_speed2/L_speed;
+			L_speed=L_speed2;
+		}
+		if(R_speed>0)
+		{
+			double R_speed2= (R_speed-last_cmd.r) > 0 ? min(last_cmd.r+accel_lim_v, R_speed ) : max(last_cmd.r-accel_lim_v , R_speed);
+			L_speed=L_speed*R_speed2/R_speed;
+			R_speed=R_speed2;
+		}
+
+		cout<<"smooth_L="<<L_speed<<endl;
+		cout<<"smooth_R="<<R_speed<<endl;
+
+		last_cmd.l = L_speed;
+		last_cmd.r = R_speed;
+
+
+		
   	//	Write_A_B(L_speed,R_speed,Channal_AB,1);		//Control DA output
 		if (digitalRead(3)==1 && digitalRead(4)==0)
                 {
                         L_speed=0;
                         R_speed=0;
                         send_vel_to_uno(STOP,L_speed,R_speed);
-                	cout<<"Value is "<<digitalRead(3)<<" "<<digitalRead(4)<<endl;
-		        cout<<"Alert Alert"<<endl;
+                	//cout<<"Value is "<<digitalRead(3)<<" "<<digitalRead(4)<<endl;
+		        //cout<<"Alert Alert"<<endl;
                 }
 		else
 		{
 			send_vel_to_uno(RUN,L_speed,R_speed);
-                        cout<<"Value is "<<digitalRead(3)<<" "<<digitalRead(4)<<endl;
+                        //cout<<"Value is "<<digitalRead(3)<<" "<<digitalRead(4)<<endl;
 		}
 		cout<<"L_speed= "<<L_speed<<endl;
 		cout<<"R_speed= "<<R_speed<<endl;
